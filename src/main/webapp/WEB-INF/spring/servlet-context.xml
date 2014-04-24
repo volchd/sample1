@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:mvc="http://www.springframework.org/schema/mvc"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:rabbit="http://www.springframework.org/schema/rabbit"
+	xmlns:cloud="http://www.springframework.org/schema/cloud"
+	xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-amqp="http://www.springframework.org/schema/integration/amqp"
+	xmlns:int-stream="http://www.springframework.org/schema/integration/stream"
+	xmlns:int-hadoop="http://www.springframework.org/schema/integration/hadoop"
+	xmlns:task="http://www.springframework.org/schema/task"
+	xmlns:hadoop="http://www.springframework.org/schema/hadoop"
+	xsi:schemaLocation="http://www.springframework.org/schema/integration/amqp http://www.springframework.org/schema/integration/amqp/spring-integration-amqp-4.0.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration-4.0.xsd
+		http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-3.0.xsd
+		http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.0.xsd
+		http://www.springframework.org/schema/integration/stream http://www.springframework.org/schema/integration/stream/spring-integration-stream-4.0.xsd
+		http://www.springframework.org/schema/cloud http://www.springframework.org/schema/cloud/spring-cloud.xsd
+		http://www.springframework.org/schema/rabbit http://www.springframework.org/schema/rabbit/spring-rabbit-1.0.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+		http://www.springframework.org/schema/hadoop http://www.springframework.org/schema/hadoop/spring-hadoop.xsd
+		http://www.springframework.org/schema/integration/hadoop http://www.springframework.org/schema/integration/hadoop/spring-integration-hadoop.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd">
+    <context:component-scan base-package="com.rabbitmq.cftutorial.simple"/>
+    <mvc:annotation-driven/>
+    <task:executor id="taskExecutor" pool-size="1"/>
+	<task:scheduler id="taskScheduler" pool-size="1"/>
+    <!-- Spring Integration -->
+    
+    <int-amqp:inbound-channel-adapter channel="outputChannel"
+		queue-names="system.events" connection-factory="connectionFactory" />
+    
+    <int:channel id="outputChannel">
+		<int:interceptors>
+			<int:wire-tap channel="loggingChannel" />
+		</int:interceptors>
+	</int:channel>
+	
+	<int-stream:stdout-channel-adapter id="consoleOut" channel="outputChannel"
+		append-newline="true" />
+	<int:logging-channel-adapter id="loggingChannel" log-full-message="true"
+		level="INFO" />
+		
+		
+	<int-hadoop:rollover-strategy>
+		<int-hadoop:size size="10000" />
+	</int-hadoop:rollover-strategy>
+
+	<!--
+	Order options needed because xml parser don't yet support
+	ordering in a way it exist in this xml.
+	default option for fileName set here due to variable.
+	-->
+	<int-hadoop:naming-strategy>
+		<int-hadoop:static order="1" name="systemEvents" />
+		<int-hadoop:rolling order="2" />
+		<int-hadoop:static order="3" prefix="." name="txt" />
+		<int-hadoop:codec />
+	</int-hadoop:naming-strategy>
+
+	<!-- default option for directory set here due to variable -->
+	<int-hadoop:store-writer
+		base-path="/datalake/systemEvents"
+		codec="UTF"
+		overwrite="false"
+		idle-timeout="10000"
+		in-use-suffix="_inuse"
+		in-use-prefix="inuse_"
+		rollover-strategy="fileRolloverStrategy"
+		naming-strategy="fileNamingStrategy" />
+
+	<int-hadoop:hdfs-outbound-channel-adapter channel="outputChannel"
+		writer="storeWriter" />
+    <!--  RabbitMQ Configuration -->
+
+    <!-- Obtain a connection to the RabbitMQ via cloudfoundry-runtime: -->
+    <cloud:rabbit-connection-factory id="connectionFactory"/>
+
+    <!-- Set up the AmqpTemplate/RabbitTemplate: -->
+    <rabbit:template id="amqpTemplate" connection-factory="connectionFactory"/>
+
+    <!-- Request that queues, exchanges and bindings be automatically
+         declared on the broker: -->
+    <rabbit:admin connection-factory="connectionFactory"/>
+
+    <!-- Declare the "messages" queue: -->
+    <rabbit:queue name="system.events" durable="true"/>
+    
+    	<!-- HADOOP configuration -->
+	<hadoop:configuration properties-location="WEB-INF/spring/hadoop.properties"/>
+</beans>
