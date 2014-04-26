@@ -28,20 +28,21 @@
 	<task:scheduler id="taskScheduler" pool-size="1"/>
     <!-- Spring Integration -->
     
-    <int-amqp:inbound-channel-adapter channel="outputChannel"
+    <int-amqp:inbound-channel-adapter channel="fromRabbit"
 		queue-names="system.events" connection-factory="connectionFactory" />
     
-    <int:channel id="outputChannel">
+    <int:channel id="fromRabbit">
 		<int:interceptors>
 			<int:wire-tap channel="loggingChannel" />
 		</int:interceptors>
 	</int:channel>
-	
-	<int-stream:stdout-channel-adapter id="consoleOut" channel="outputChannel"
-		append-newline="true" />
-	<int:logging-channel-adapter id="loggingChannel" log-full-message="true"
-		level="INFO" />
-		
+	 <int:json-to-object-transformer input-channel="fromRabbit" output-channel="trasformed"/>
+	 <int:channel id="trasformed"/>
+	<!--<int-stream:stdout-channel-adapter id="consoleOut" channel="outputChannel"
+		append-newline="true" />-->	
+	 <int:logging-channel-adapter id="loggingChannel" log-full-message="true"
+		level="DEBUG" />
+	 
 		
 	<int-hadoop:rollover-strategy>
 		<int-hadoop:size size="10000" />
@@ -61,7 +62,7 @@
 
 	<!-- default option for directory set here due to variable -->
 	<int-hadoop:store-writer
-		base-path="/datalake/systemEvents"
+		base-path="/datalake/systemEvents1"
 		codec="UTF"
 		overwrite="false"
 		idle-timeout="10000"
@@ -70,13 +71,13 @@
 		rollover-strategy="fileRolloverStrategy"
 		naming-strategy="fileNamingStrategy" />
 
-	<int-hadoop:hdfs-outbound-channel-adapter channel="outputChannel"
+	<int-hadoop:hdfs-outbound-channel-adapter channel="trasformed"
 		writer="storeWriter" />
     <!--  RabbitMQ Configuration -->
 
     <!-- Obtain a connection to the RabbitMQ via cloudfoundry-runtime: -->
-    <cloud:rabbit-connection-factory id="connectionFactory"/>
-
+    <!--  <cloud:rabbit-connection-factory id="connectionFactory"/>-->
+	<rabbit:connection-factory id="connectionFactory" />
     <!-- Set up the AmqpTemplate/RabbitTemplate: -->
     <rabbit:template id="amqpTemplate" connection-factory="connectionFactory"/>
 
@@ -88,5 +89,12 @@
     <rabbit:queue name="system.events" durable="true"/>
     
     	<!-- HADOOP configuration -->
-	<hadoop:configuration properties-location="WEB-INF/spring/hadoop.properties"/>
+	<!-- <hadoop:configuration properties-location="WEB-INF/spring/hadoop.properties"/>  -->
+	     <hadoop:configuration>
+        fs.default.name=hdfs://10.8.4.129:8020
+        hadoop.job.ugi=gpadmin
+     </hadoop:configuration>
+	
+	     
+	     
 </beans>
